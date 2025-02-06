@@ -4,18 +4,15 @@ import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
 import cors from "cors";
+import { fetchProfileAndPinnedTweets } from "./agent-twitter-client.js";
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
-// Initialize the OpenAI client with your API key
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Ensure the /character directory exists (create it if necessary)
 const characterDir = path.join(process.cwd(), "character");
 if (!fs.existsSync(characterDir)) {
   fs.mkdirSync(characterDir, { recursive: true });
@@ -23,67 +20,94 @@ if (!fs.existsSync(characterDir)) {
 }
 
 app.post("/create-character", async (req, res) => {
-  // Use the entire request body as a knowledge base.
-  // This can include user details, work info, health data, events, etc.
-  const knowledgeBase = JSON.stringify(req.body, null, 2);
+  try {
+    // Extract the Twitter username from the request body
+    const { twitterUsername, ...otherDetails } = req.body;
 
-  // Build a prompt that instructs the model to generate a diversified and detailed character JSON profile.
-  // The JSON structure now includes additional "health" and "events" fields.
-  const prompt = `
-You are to generate a JSON character profile for a personalized AI assistant.
-The JSON should follow the structure below (example):
+    // Fetch profile and pinned tweets
+    const { profile, pinnedTweetDetails } = await fetchProfileAndPinnedTweets(
+      twitterUsername
+    );
 
+    // Build a knowledge base that includes the Twitter profile data and pinned tweet details
+    const knowledgeBase = {
+      ...otherDetails,
+      name: profile.name,
+      bio: profile.biography,
+      pinnedTweetDetails,
+    };
+
+    const sampleCharacterJson = `
 {
-  "name": "Character Name",
+  "name": "John Doe",
   "clients": [],
   "modelProvider": "openai",
   "settings": {
     "secrets": {},
-    "voice": { "model": "en_US-female-medium" }
+    "voice": { "model": "en_US-male-medium" }
   },
   "plugins": [],
-  "bio": [ "A brief description of the character and background." ],
-  "lore": [ "Additional background details or notable events." ],
-  "knowledge": [ "Relevant knowledge or expertise areas." ],
+  "bio": [
+    "John Doe is a seasoned professional in the AI industry, known for his innovative approaches to problem-solving."
+  ],
+  "lore": [
+    "John has been involved in cutting-edge AI research since the early 2010s, contributing to several landmark projects."
+  ],
+  "knowledge": [
+    "Artificial Intelligence",
+    "Machine Learning",
+    "Natural Language Processing"
+  ],
   "health": {
-      "currentStatus": "Good/Average/Poor",
-      "fitnessLevel": "Beginner/Intermediate/Advanced",
-      "healthGoals": ["Goal1", "Goal2"],
-      "currentRoutine": "Details of current health routine"
+    "currentStatus": "Good",
+    "fitnessLevel": "Intermediate",
+    "healthGoals": ["Maintain stamina", "Increase flexibility"],
+    "currentRoutine": "Yoga and cycling three times a week"
   },
   "events": [
-      {
-         "eventName": "Event Name",
-         "location": "City, Country",
-         "date": "YYYY-MM-DD",
-         "description": "Description of the event"
-      }
+    {
+      "eventName": "AI Conference 2023",
+      "location": "San Francisco, USA",
+      "date": "2023-10-15",
+      "description": "A conference showcasing the latest developments in AI technology."
+    }
   ],
   "messageExamples": [
     [
-      { "user": "ExampleUser", "content": { "text": "Sample message?" } },
-      { "user": "Character", "content": { "text": "Response message." } }
+      { "user": "Alice", "content": { "text": "What is machine learning?" } },
+      { "user": "John Doe", "content": { "text": "Machine learning involves training algorithms on data to make predictions or decisions without explicit programming." } }
     ]
   ],
-  "postExamples": [ "Example post or statement by the character." ],
-  "topics": [ "Topics or areas of discussion." ],
+  "postExamples": [
+    "Excited to attend the upcoming AI Conference in San Francisco. Looking forward to meeting fellow innovators!"
+  ],
+  "topics": [
+    "Artificial Intelligence",
+    "Machine Learning",
+    "Tech Conferences"
+  ],
   "style": {
-    "all": [ "List of adjectives or style elements" ],
-    "chat": [ "Chat style guidelines" ],
-    "post": [ "Post style guidelines" ]
+    "all": ["Professional", "Informative", "Engaging"],
+    "chat": ["Clear and concise responses", "Engaging tone"],
+    "post": ["Insightful comments", "Actionable advice"]
   },
-  "adjectives": [ "Descriptive", "words" ]
+  "adjectives": ["Experienced", "Innovative", "Analytical"]
 }
+    `;
+
+    const prompt = `
+You are to generate a JSON character profile for a personalized AI assistant.
+The JSON should follow the structure below (example):
+
+${sampleCharacterJson}
 
 Use the following knowledge base to generate a unique, diversified JSON character profile that includes detailed events and health factors:
 
-${knowledgeBase}
+${JSON.stringify(knowledgeBase, null, 2)}
 
 Generate only the JSON output and nothing else.
 `;
 
-  try {
-    // Call the OpenAI Chat Completions API with the prompt.
     const response = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [
@@ -101,10 +125,8 @@ Generate only the JSON output and nothing else.
       max_tokens: 1500,
     });
 
-    // Extract and trim the generated content
     const output = response.choices[0].message.content.trim();
 
-    // Parse the output as JSON
     let characterJson;
     try {
       characterJson = JSON.parse(output);
@@ -116,7 +138,6 @@ Generate only the JSON output and nothing else.
       });
     }
 
-    // Determine a filename based on the generated character's name (if available) or use a timestamp.
     let filename = "character-" + Date.now() + ".json";
     if (characterJson.name) {
       filename =
@@ -127,17 +148,12 @@ Generate only the JSON output and nothing else.
     }
     const filePath = path.join(characterDir, filename);
 
-    // Save the character JSON to the file
     fs.writeFileSync(filePath, JSON.stringify(characterJson, null, 2), "utf8");
     console.log(`Saved character file: ${filePath}`);
 
-    // Return the generated character JSON and file path in the response
     res.json({ character: characterJson, filePath });
   } catch (error) {
-    console.error(
-      "OpenAI API error:",
-      error.response ? error.response.data : error.message
-    );
+    console.error("OpenAI API error:", error);
     res.status(500).json({ error: "Failed to generate character JSON" });
   }
 });
