@@ -24,10 +24,16 @@ app.post("/create-character", async (req, res) => {
     // Extract the Twitter username from the request body
     const { twitterUsername, ...otherDetails } = req.body;
 
+    console.log("Twitter username received:", twitterUsername);
+    console.log("Other details received:", otherDetails);
+
     // Fetch profile and pinned tweets
     const { profile, pinnedTweetDetails } = await fetchProfileAndPinnedTweets(
       twitterUsername
     );
+
+    console.log("Profile fetched:", profile);
+    console.log("Pinned tweet details fetched:", pinnedTweetDetails);
 
     // Build a knowledge base that includes the Twitter profile data and pinned tweet details
     const knowledgeBase = {
@@ -37,63 +43,63 @@ app.post("/create-character", async (req, res) => {
       pinnedTweetDetails,
     };
 
-    const sampleCharacterJson = `
-{
-  "name": "John Doe",
-  "clients": [],
-  "modelProvider": "openai",
-  "settings": {
-    "secrets": {},
-    "voice": { "model": "en_US-male-medium" }
-  },
-  "plugins": [],
-  "bio": [
-    "John Doe is a seasoned professional in the AI industry, known for his innovative approaches to problem-solving."
-  ],
-  "lore": [
-    "John has been involved in cutting-edge AI research since the early 2010s, contributing to several landmark projects."
-  ],
-  "knowledge": [
-    "Artificial Intelligence",
-    "Machine Learning",
-    "Natural Language Processing"
-  ],
-  "health": {
-    "currentStatus": "Good",
-    "fitnessLevel": "Intermediate",
-    "healthGoals": ["Maintain stamina", "Increase flexibility"],
-    "currentRoutine": "Yoga and cycling three times a week"
-  },
-  "events": [
-    {
-      "eventName": "AI Conference 2023",
-      "location": "San Francisco, USA",
-      "date": "2023-10-15",
-      "description": "A conference showcasing the latest developments in AI technology."
-    }
-  ],
-  "messageExamples": [
-    [
-      { "user": "Alice", "content": { "text": "What is machine learning?" } },
-      { "user": "John Doe", "content": { "text": "Machine learning involves training algorithms on data to make predictions or decisions without explicit programming." } }
-    ]
-  ],
-  "postExamples": [
-    "Excited to attend the upcoming AI Conference in San Francisco. Looking forward to meeting fellow innovators!"
-  ],
-  "topics": [
-    "Artificial Intelligence",
-    "Machine Learning",
-    "Tech Conferences"
-  ],
-  "style": {
-    "all": ["Professional", "Informative", "Engaging"],
-    "chat": ["Clear and concise responses", "Engaging tone"],
-    "post": ["Insightful comments", "Actionable advice"]
-  },
-  "adjectives": ["Experienced", "Innovative", "Analytical"]
-}
-    `;
+    console.log("Knowledge base constructed:", knowledgeBase);
+
+    const sampleCharacterJson = `{
+      "name": "John Doe",
+      "clients": [],
+      "modelProvider": "openai",
+      "settings": {
+        "secrets": {},
+        "voice": { "model": "en_US-male-medium" }
+      },
+      "plugins": [],
+      "bio": [
+        "John Doe is a seasoned professional in the AI industry, known for his innovative approaches to problem-solving."
+      ],
+      "lore": [
+        "John has been involved in cutting-edge AI research since the early 2010s, contributing to several landmark projects."
+      ],
+      "knowledge": [
+        "Artificial Intelligence",
+        "Machine Learning",
+        "Natural Language Processing"
+      ],
+      "health": {
+        "currentStatus": "Good",
+        "fitnessLevel": "Intermediate",
+        "healthGoals": ["Maintain stamina", "Increase flexibility"],
+        "currentRoutine": "Yoga and cycling three times a week"
+      },
+      "events": [
+        {
+          "eventName": "AI Conference 2023",
+          "location": "San Francisco, USA",
+          "date": "2023-10-15",
+          "description": "A conference showcasing the latest developments in AI technology."
+        }
+      ],
+      "messageExamples": [
+        [
+          { "user": "Alice", "content": { "text": "What is machine learning?" } },
+          { "user": "John Doe", "content": { "text": "Machine learning involves training algorithms on data to make predictions or decisions without explicit programming." } }
+        ]
+      ],
+      "postExamples": [
+        "Excited to attend the upcoming AI Conference in San Francisco. Looking forward to meeting fellow innovators!"
+      ],
+      "topics": [
+        "Artificial Intelligence",
+        "Machine Learning",
+        "Tech Conferences"
+      ],
+      "style": {
+        "all": ["Professional", "Informative", "Engaging"],
+        "chat": ["Clear and concise responses", "Engaging tone"],
+        "post": ["Insightful comments", "Actionable advice"]
+      },
+      "adjectives": ["Experienced", "Innovative", "Analytical"]
+    }`;
 
     const prompt = `
 You are to generate a JSON character profile for a personalized AI assistant.
@@ -107,6 +113,8 @@ ${JSON.stringify(knowledgeBase, null, 2)}
 
 Generate only the JSON output and nothing else.
 `;
+
+    console.log("Prompt constructed:", prompt);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4",
@@ -126,6 +134,7 @@ Generate only the JSON output and nothing else.
     });
 
     const output = response.choices[0].message.content.trim();
+    console.log("Raw response from OpenAI:", output);
 
     let characterJson;
     try {
@@ -148,12 +157,14 @@ Generate only the JSON output and nothing else.
     }
     const filePath = path.join(characterDir, filename);
 
+    console.log("Saving character JSON to file:", filePath);
+
     fs.writeFileSync(filePath, JSON.stringify(characterJson, null, 2), "utf8");
     console.log(`Saved character file: ${filePath}`);
 
     res.json({ character: characterJson, filePath });
   } catch (error) {
-    console.error("OpenAI API error:", error);
+    console.error("Error in creating character JSON:", error);
     res.status(500).json({ error: "Failed to generate character JSON" });
   }
 });
